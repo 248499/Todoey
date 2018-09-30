@@ -185,9 +185,6 @@ class ToDoListViewController: UITableViewController {
         
     }
     
-    func myFunc(){
-        
-    }
 
 }
 
