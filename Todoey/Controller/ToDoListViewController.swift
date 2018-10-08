@@ -7,11 +7,12 @@
 //
 
 import UIKit
-import CoreData
+import RealmSwift
 
 class ToDoListViewController: UITableViewController {
 
-    var myArray = [Item]()
+    var todoItems: Results<Item>?
+    let realm = try! Realm()
     
     var selectedCategory: Category? {
         didSet{
@@ -19,50 +20,46 @@ class ToDoListViewController: UITableViewController {
         }
     }
    
-    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
-    
-    //let defaults = UserDefaults.standard
-    
     override func viewDidLoad() {
         super.viewDidLoad()
         
         
          print(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask))
         
-        print(selectedCategory!)
+        //print(selectedCategory!)
         //print(x)
         //print(datafilepath!)
        
         /*
         let newItem = item()
         newItem.title = "Asp.net Developer"
-        myArray.append(newItem)
+        todoItems.append(newItem)
         
         let newItem1 = item()
         newItem1.title = "Android Developer"
-        myArray.append(newItem1)
+        todoItems.append(newItem1)
         
         let newItem2 = item()
         newItem2.title = "IOS Developer"
-        myArray.append(newItem2)
+        todoItems.append(newItem2)
         
         let newItem3 = item()
         newItem3.title = "Java Developer"
-        myArray.append(newItem3)
+        todoItems.append(newItem3)
         */
         
         //LoadItems()
         
         // Called NSUserDefault
         //if let items = defaults.array(forKey: "TodoListArray") as? [Item] {
-        //    myArray = items
+        //    todoItems = items
         //}
     }
     
     // tableview datasource methods ***********
     
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return myArray.count
+        return todoItems?.count ?? 1
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -70,15 +67,19 @@ class ToDoListViewController: UITableViewController {
         // this cell below unsave .checkmark when drag cell
         //let cell = UITableViewCell(style: .default, reuseIdentifier: "ToDoItemCell")
         
-        //print("select")
-        
         let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for: indexPath)
         
-        let item = myArray[indexPath.row]
-        cell.textLabel?.text = item.title
-        
-        //ternery operator
-        cell.accessoryType = item.done ? .checkmark : .none
+        if let item = todoItems?[indexPath.row] {
+            
+            cell.textLabel?.text = item.title
+            //ternery operator
+            cell.accessoryType = item.done ? .checkmark : .none
+            
+        }
+        else{
+            cell.textLabel?.text = "No Items Added"
+        }
+       
         
         //value = condition ? valueiftrue : valueiffalse
         
@@ -96,21 +97,35 @@ class ToDoListViewController: UITableViewController {
     // tableview delegate methods ***********
     
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        //print("\(myArray[indexPath.row])")
+        
+        if let item = todoItems?[indexPath.row] {
+            do{
+                try! realm.write {
+                    item.done = !item.done
+                    //for delete item
+                    //realm.delete(item)
+                }
+            }
+            catch{
+                print("Error \(error)")
+            }
+        }
+        
+        tableView.reloadData()
         
         // to remove item from array ***
-        //context.delete(myArray[indexPath.row])
-        //myArray.remove(at: indexPath.row)
+        //context.delete(todoItems[indexPath.row])
+        //todoItems.remove(at: indexPath.row)
         
         // method 1
-        myArray[indexPath.row].done = !myArray[indexPath.row].done
+        //todoItems?[indexPath.row].done = !todoItems?[indexPath.row].done
         
         /*/  method 2
-        /if myArray[indexPath.row].done == false {
-            myArray[indexPath.row].done = true
+        /if todoItems[indexPath.row].done == false {
+            todoItems[indexPath.row].done = true
         }
         else{
-            myArray[indexPath.row].done = false
+            todoItems[indexPath.row].done = false
         }
         */
         
@@ -142,14 +157,31 @@ class ToDoListViewController: UITableViewController {
             
             if !(textfield.text?.isEmpty)! {
                 
-                let newItem = Item(context: self.context)
-                newItem.title = textfield.text!
-                newItem.done = false
-                newItem.parentCategory = self.selectedCategory
+                if let currentCategory = self.selectedCategory {
+                    do{
+                        try self.realm.write {
+                            let newItem = Item()
+                            newItem.title = textfield.text!
+                            
+                            let date = Date()
+                            
+                            newItem.dataCreated = date
+                            currentCategory.items.append(newItem)
+                        }
+                   
+                    }
+                    catch{
+                        print("error")
+                    }
+                }
                 
-                self.myArray.append(newItem)
+               self.tableView.reloadData()
+                //newItem.done = false
                 
-               self.SaveItems()
+
+                //self.todoItems.append(newItem)
+                
+               //self.SaveItems()
             }
             
             
@@ -165,53 +197,56 @@ class ToDoListViewController: UITableViewController {
         
     }
     
-    func SaveItems() {
-        
-        
-        do{
-            try context.save()
-        }
-        catch{
-            print(error)
-        }
-        
-        
-        //self.defaults.set(self.myArray, forKey: "TodoListArray")
-        
-        self.tableView.reloadData()
-    }
+//    func SaveItems() {
+//
+//
+//        do{
+//            try context.save()
+//        }
+//        catch{
+//            print(error)
+//        }
+//
+//
+//        //self.defaults.set(self.todoItems, forKey: "TodoListArray")
+//
+//        self.tableView.reloadData()
+//    }
     
 
-    func LoadItems(with request: NSFetchRequest<Item> = Item.fetchRequest(), predicate: NSPredicate? = nil) {
+    func LoadItems() {
+
+        todoItems = selectedCategory?.items.sorted(byKeyPath: "title", ascending: true)
+        
         
         //let request :NSFetchRequest<Item> = Item.fetchRequest()
-        let CategoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
-        
-        if let additionalPredicate = predicate {
-            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [CategoryPredicate,additionalPredicate])
-        }
-        else{
-            request.predicate = CategoryPredicate
-        }
-        /*
-        let commandPredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [CategoryPredicate,predicate!])
-        
-        request.predicate = commandPredicate
-        */
-        do{
-        myArray = try context.fetch(request)
-        }
-        catch{
-            print(error)
-        }
+//        let CategoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
+//
+//        if let additionalPredicate = predicate {
+//            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [CategoryPredicate,additionalPredicate])
+//        }
+//        else{
+//            request.predicate = CategoryPredicate
+//        }
+//        /*
+//        let commandPredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [CategoryPredicate,predicate!])
+//
+//        request.predicate = commandPredicate
+//        */
+//        do{
+//        todoItems = try context.fetch(request)
+//        }
+//        catch{
+//            print(error)
+//        }
         self.tableView.reloadData()
     }
 
     func Delete(){
         //do{
 
-        //try context.delete(myArray[indexPath.row])
-        //myArray.remove(at: indexPath.row)
+        //try context.delete(todoItems[indexPath.row])
+        //todoItems.remove(at: indexPath.row)
         //}
         //catch(){
             
@@ -223,33 +258,36 @@ class ToDoListViewController: UITableViewController {
 }
 //MARK: - Search Bar Methods
 extension ToDoListViewController: UISearchBarDelegate{
-    
-    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
-        
-        let request: NSFetchRequest<Item> = Item.fetchRequest()
-        print(searchBar.text!)
-        
-        let predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
-        
-        //request.predicate = predicate
-        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
 
-        LoadItems(with: request,predicate: predicate)
-        //print(request.strin)
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+
+        
+        todoItems = todoItems?.filter("title CONTAINS[cd] %@", searchBar.text!).sorted(byKeyPath: "dataCreated", ascending: true)
+        tableView.reloadData()
+//        let request: NSFetchRequest<Item> = Item.fetchRequest()
+//        print(searchBar.text!)
+//
+//        let predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
+//
+//        //request.predicate = predicate
+//        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+//
+//        LoadItems(with: request,predicate: predicate)
+//        //print(request.strin)
     }
-    
-    
+
+
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
         if searchBar.text?.count == 0 {
             LoadItems()
-            
+
             DispatchQueue.main.async {
                 searchBar.resignFirstResponder()
             }
- 
+
         }
     }
-    
-    
+
+
 }
 
